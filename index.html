@@ -5,16 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="F1TENTH NTU is a student club for autonomous racing, robotics, perception, planning, and controls."
+      content="NTU DeepSpeed is a student autonomous racing team building 1:10 scale F1TENTH and RoboRacer style race cars."
     />
-    <title>F1TENTH NTU</title>
+    <title>NTU DeepSpeed | Autonomous Racing</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
     <link rel="stylesheet" href="styles.css" />
+    <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"
+    ></script>
+    <script defer src="script.js"></script>
   </head>
   <body>
+    <div class="race-bg" aria-hidden="true">
+      <span class="speed-line line-one"></span>
+      <span class="speed-line line-two"></span>
+      <span class="speed-line line-three"></span>
+      <span class="track-ring ring-one"></span>
+      <span class="track-ring ring-two"></span>
+      <span class="checker ghost-checker"></span>
+    </div>
+
     <header class="site-header">
-      <a class="brand" href="#home" aria-label="F1TENTH NTU home">
-        <span class="brand-mark">F1</span>
-        <span>F1TENTH NTU</span>
+      <a class="brand" href="#home" aria-label="NTU DeepSpeed home">
+        <img src="assets/deepspeed-logo.png" alt="" />
+        <span>NTU DeepSpeed</span>
       </a>
 
       <button class="nav-toggle" type="button" aria-label="Open navigation" aria-expanded="false">
@@ -24,118 +40,353 @@
 
       <nav class="site-nav" aria-label="Main navigation">
         <a href="#about">About</a>
+        <a href="#learn">Learn</a>
         <a href="#projects">Projects</a>
+        <a href="#car">Car</a>
         <a href="#team">Team</a>
+        <a href="#events">Events</a>
+        <a href="#results">Results</a>
         <a href="#join">Join</a>
       </nav>
     </header>
 
     <main id="home">
-      <section class="hero">
+      <section class="hero section-panel">
         <div class="hero-copy">
-          <p class="eyebrow">Nanyang Technological University</p>
-          <h1>Autonomous racing, built one tenth at a time.</h1>
+          <div class="hero-logo" aria-hidden="true">
+            <img src="assets/deepspeed-logo.png" alt="" />
+          </div>
+          <p class="race-label">Nanyang Technological University</p>
+          <h1>NTU DeepSpeed</h1>
           <p class="hero-text">
-            We design, test, and race small-scale self-driving cars while learning robotics,
-            software, controls, and teamwork.
+            A student-built autonomous racing team developing 1:10 scale race cars for
+            perception, planning, control, simulation, and head-to-head competition.
           </p>
           <div class="hero-actions">
-            <a class="button primary" href="#join">Join the club</a>
-            <a class="button secondary" href="#projects">See projects</a>
+            <a class="button primary" href="#car">Explore the car</a>
+            <a class="button secondary" href="#join">Join the team</a>
           </div>
         </div>
 
-        <div class="hero-visual" aria-label="Minimal autonomous race car illustration">
-          <div class="track-line"></div>
-          <div class="car">
-            <div class="car-body"></div>
-            <div class="sensor"></div>
-            <div class="wheel front"></div>
-            <div class="wheel rear"></div>
+        <div class="hero-stage" aria-label="Racing inspired animated background">
+          <div class="finish-strip" aria-hidden="true"></div>
+          <div class="telemetry-card">
+            <span>ROS 2</span>
+            <strong>Autonomy stack</strong>
+            <small>Perception -> Planning -> Control</small>
+          </div>
+          <div class="hero-car rc-hero-car" aria-hidden="true">
+            <span class="rc-bumper front"></span>
+            <span class="rc-bumper rear"></span>
+            <span class="rc-rail rail-top"></span>
+            <span class="rc-rail rail-bottom"></span>
+            <span class="rc-cross cross-one"></span>
+            <span class="rc-cross cross-two"></span>
+            <span class="rc-deck"></span>
+            <span class="rc-board compute"></span>
+            <span class="rc-board controller"></span>
+            <span class="rc-fan"></span>
+            <span class="rc-lidar"></span>
+            <span class="rc-battery"></span>
+            <span class="rc-wire wire-one"></span>
+            <span class="rc-wire wire-two"></span>
+            <span class="rc-antenna antenna-one"></span>
+            <span class="rc-antenna antenna-two"></span>
+            <span class="hero-wheel front-left"></span>
+            <span class="hero-wheel front-right"></span>
+            <span class="hero-wheel rear-left"></span>
+            <span class="hero-wheel rear-right"></span>
+          </div>
+          <div class="track-copy">
+            <span>1:10 scale</span>
+            <span>Racing lab</span>
+            <span>Student built</span>
           </div>
         </div>
       </section>
 
-      <section class="section" id="about">
-        <div class="section-heading">
-          <p class="eyebrow">About</p>
-          <h2>A hands-on space for robotics and racing.</h2>
-        </div>
-        <p class="section-text">
-          F1TENTH NTU brings students together to work on autonomous racing cars using
-          perception, localization, planning, and control. Whether you are new to robotics or
-          already comfortable with code and hardware, there is a place to contribute.
-        </p>
-      </section>
-
-      <section class="stats" aria-label="Club focus areas">
-        <article>
-          <span>01</span>
-          <h3>Robotics</h3>
-          <p>Build and tune the vehicle platform, sensors, and compute stack.</p>
-        </article>
-        <article>
-          <span>02</span>
-          <h3>Autonomy</h3>
-          <p>Work on perception, mapping, planning, simulation, and controls.</p>
-        </article>
-        <article>
-          <span>03</span>
-          <h3>Racing</h3>
-          <p>Test algorithms on track and improve lap time through iteration.</p>
-        </article>
-      </section>
-
-      <section class="section split" id="projects">
-        <div class="section-heading">
-          <p class="eyebrow">Projects</p>
-          <h2>What we work on.</h2>
-        </div>
-        <div class="project-list">
-          <article>
-            <h3>Race Stack</h3>
-            <p>Path planning, speed control, and obstacle avoidance for close-course racing.</p>
-          </article>
-          <article>
-            <h3>Simulation</h3>
-            <p>Fast testing environments for new algorithms before track runs.</p>
-          </article>
-          <article>
-            <h3>Vehicle Setup</h3>
-            <p>Sensor calibration, chassis tuning, and reliable onboard systems.</p>
-          </article>
-        </div>
-      </section>
-
-      <section class="section split" id="team">
-        <div class="section-heading">
-          <p class="eyebrow">Team</p>
-          <h2>Built by students across disciplines.</h2>
-        </div>
-        <p class="section-text">
-          We welcome students interested in mechanical design, embedded systems, AI, computer
-          vision, controls, web, documentation, and event planning.
-        </p>
-      </section>
-
-      <section class="join" id="join">
-        <div>
-          <p class="eyebrow">Join</p>
-          <h2>Interested in racing with us?</h2>
+      <section class="intro-grid" id="about">
+        <article class="intro-card">
+          <span class="card-index">01</span>
+          <h2>What is NTU DeepSpeed?</h2>
           <p>
-            Add your sign-up form, Telegram group, Instagram, or email here once your club
-            channels are ready.
+            DeepSpeed is NTU's student autonomous racing effort: a place to build compact
+            race cars, test algorithms on real hardware, and learn how robotics systems behave
+            when speed matters.
+          </p>
+        </article>
+        <article class="intro-card">
+          <span class="card-index">02</span>
+          <h2>Why people should care</h2>
+          <p>
+            Autonomous racing turns self-driving research into a fast feedback loop. Students
+            can safely push perception, planning, and controls on a smaller platform before
+            ideas move toward larger vehicles.
+          </p>
+        </article>
+        <article class="intro-card">
+          <span class="card-index">03</span>
+          <h2>How they can join</h2>
+          <p>
+            Join as a coder, builder, designer, strategist, organizer, or curious beginner. We
+            will add the real sign-up form and club channels once they are ready.
+          </p>
+        </article>
+      </section>
+
+      <section class="section-panel learn" id="learn">
+        <div class="section-heading">
+          <p class="race-label">Learn</p>
+          <h2>Start here before race day.</h2>
+          <p>
+            Public resources for students who want to understand what F1TENTH / RoboRacer is,
+            how the cars are built, and how autonomous racing software comes together.
           </p>
         </div>
-        <a class="button primary" href="mailto:your-email@ntu.edu.sg">Contact us</a>
+        <div class="resource-grid">
+          <a class="resource-card" href="https://roboracer.ai/learn" target="_blank" rel="noreferrer">
+            <span>Course</span>
+            <h3>RoboRacer Learn</h3>
+            <p>Lectures and learning material for autonomous racing foundations.</p>
+          </a>
+          <a class="resource-card" href="https://f1tenth-coursekit.readthedocs.io/" target="_blank" rel="noreferrer">
+            <span>Course kit</span>
+            <h3>F1TENTH Learn Docs</h3>
+            <p>Perception, planning, control, simulator tutorials, and course modules.</p>
+          </a>
+          <a class="resource-card" href="https://f1tenth.readthedocs.io/" target="_blank" rel="noreferrer">
+            <span>Build</span>
+            <h3>Build Documentation</h3>
+            <p>Official documentation for building and operating a RoboRacer car.</p>
+          </a>
+          <a class="resource-card" href="https://github.com/f1tenth" target="_blank" rel="noreferrer">
+            <span>Code</span>
+            <h3>F1TENTH GitHub</h3>
+            <p>Community repositories for simulators, tracks, rules, docs, and tooling.</p>
+          </a>
+        </div>
+      </section>
+
+      <section class="section-panel projects" id="projects">
+        <div class="section-heading">
+          <p class="race-label">Projects</p>
+          <h2>Built like a racing garage.</h2>
+        </div>
+        <div class="garage-grid">
+          <article>
+            <span>Software</span>
+            <h3>Race Stack</h3>
+            <p>Localization, raceline planning, obstacle avoidance, and velocity control.</p>
+          </article>
+          <article>
+            <span>Simulation</span>
+            <h3>Digital Track</h3>
+            <p>Prototype autonomy algorithms before putting the car on the track.</p>
+          </article>
+          <article>
+            <span>Hardware</span>
+            <h3>Vehicle Platform</h3>
+            <p>Sensor mounting, power layout, chassis tuning, and reliable pit workflows.</p>
+          </article>
+          <article>
+            <span>Operations</span>
+            <h3>Race Day</h3>
+            <p>Testing sessions, lap timing, documentation, media, and outreach.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section-panel car-lab" id="car">
+        <div class="section-heading wide">
+          <p class="race-label">Car</p>
+          <h2>What our car is made of.</h2>
+          <p>
+            Placeholder component map for the DeepSpeed vehicle. When your actual hardware list
+            is ready, we can swap these labels for exact models and photos.
+          </p>
+        </div>
+
+        <div class="car-workbench">
+          <div class="car-stage" aria-label="Exploded autonomous race car component diagram">
+            <div class="scan-beam" aria-hidden="true"></div>
+            <span class="workbench-wire wire-red" aria-hidden="true"></span>
+            <span class="workbench-wire wire-white" aria-hidden="true"></span>
+            <span class="workbench-wire wire-black" aria-hidden="true"></span>
+            <button class="car-part part-lidar" data-part="lidar" type="button">
+              <span>LiDAR</span>
+            </button>
+            <button class="car-part part-camera" data-part="camera" type="button">
+              <span>Camera</span>
+            </button>
+            <button class="car-part part-compute" data-part="compute" type="button">
+              <span>Compute</span>
+            </button>
+            <button class="car-part part-battery" data-part="battery" type="button">
+              <span>Battery</span>
+            </button>
+            <button class="car-part part-motor" data-part="motor" type="button">
+              <span>Motor</span>
+            </button>
+            <button class="car-part part-controller" data-part="controller" type="button">
+              <span>Controller</span>
+            </button>
+            <button class="car-part part-chassis" data-part="chassis" type="button">
+              <span>Chassis</span>
+            </button>
+            <button class="car-part part-wheel front-left" data-part="chassis" type="button">
+              <span>Wheel</span>
+            </button>
+            <button class="car-part part-wheel front-right" data-part="chassis" type="button">
+              <span>Wheel</span>
+            </button>
+            <button class="car-part part-wheel rear-left" data-part="chassis" type="button">
+              <span>Wheel</span>
+            </button>
+            <button class="car-part part-wheel rear-right" data-part="chassis" type="button">
+              <span>Wheel</span>
+            </button>
+          </div>
+
+          <div class="component-list" aria-label="Car components">
+            <button class="component-row is-active" data-part="lidar" type="button">
+              <span>LiDAR</span>
+              <strong>Track geometry and obstacle sensing</strong>
+            </button>
+            <button class="component-row" data-part="camera" type="button">
+              <span>Camera</span>
+              <strong>Visual perception and future lane cues</strong>
+            </button>
+            <button class="component-row" data-part="compute" type="button">
+              <span>Compute</span>
+              <strong>Runs ROS 2, autonomy, logging, and telemetry</strong>
+            </button>
+            <button class="component-row" data-part="battery" type="button">
+              <span>Battery</span>
+              <strong>Power for drive, sensors, and onboard systems</strong>
+            </button>
+            <button class="component-row" data-part="motor" type="button">
+              <span>Motor and ESC</span>
+              <strong>Acceleration, braking, and speed control</strong>
+            </button>
+            <button class="component-row" data-part="controller" type="button">
+              <span>Controller</span>
+              <strong>Steering servo, VESC, and low-level control</strong>
+            </button>
+            <button class="component-row" data-part="chassis" type="button">
+              <span>Chassis</span>
+              <strong>1:10 platform, suspension, wheels, and mounts</strong>
+            </button>
+          </div>
+        </div>
+
+        <div class="car-reference">
+          <div>
+            <p class="race-label">Reference Build</p>
+            <h3>Open chassis, exposed electronics, serious tires.</h3>
+            <p>
+              The animated diagram now follows this kind of platform: RC chassis, chunky wheels,
+              compute board, power wiring, controller, LiDAR, bumper, and sensor mounts.
+            </p>
+          </div>
+          <img src="assets/f1tenth-base.jpeg" alt="Reference F1TENTH style open RC car chassis" />
+        </div>
+      </section>
+
+      <section class="section-panel team-events">
+        <div class="section-heading">
+          <p class="race-label">Team</p>
+          <h2>Many disciplines, one pit lane.</h2>
+        </div>
+        <div class="split-grid" id="team">
+          <article class="photo-placeholder tall">
+            <span>Team photo placeholder</span>
+          </article>
+          <article class="role-board">
+            <h3>Open roles</h3>
+            <ul>
+              <li>Controls and planning</li>
+              <li>Computer vision and perception</li>
+              <li>Mechanical and electrical build</li>
+              <li>Simulation and race strategy</li>
+              <li>Design, media, events, and sponsorship</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="events-strip" id="events">
+          <article>
+            <span>Past event</span>
+            <h3>Workshop night</h3>
+            <p>Intro session placeholder.</p>
+          </article>
+          <article>
+            <span>Testing</span>
+            <h3>Track shakedown</h3>
+            <p>Lap timing placeholder.</p>
+          </article>
+          <article>
+            <span>Upcoming</span>
+            <h3>Recruitment drive</h3>
+            <p>Sign-up link placeholder.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="results section-panel" id="results">
+        <div class="results-copy">
+          <p class="race-label">Achievements</p>
+          <h2>Our Results</h2>
+          <p>
+            A dedicated space for competition placements, hackathon wins, test milestones, and
+            press photos. Numbers below are placeholders until the team confirms real results.
+          </p>
+
+          <div class="results-grid">
+            <article>
+              <strong>3rd</strong>
+              <span>Placeholder competition result</span>
+            </article>
+            <article>
+              <strong>PB</strong>
+              <span>Fastest internal lap placeholder</span>
+            </article>
+            <article>
+              <strong>01</strong>
+              <span>First public demo placeholder</span>
+            </article>
+            <article>
+              <strong>2026</strong>
+              <span>Season target placeholder</span>
+            </article>
+          </div>
+        </div>
+        <div class="result-photo photo-placeholder">
+          <span>Achievement photo placeholder</span>
+        </div>
+      </section>
+
+      <section class="join section-panel" id="join">
+        <div>
+          <p class="race-label">Contact</p>
+          <h2>Ready to build speed?</h2>
+          <p>
+            Drop in the real form, Telegram, Instagram, or email here. For now, this points to a
+            placeholder NTU email.
+          </p>
+        </div>
+        <div class="join-actions">
+          <a class="button primary" href="mailto:your-email@ntu.edu.sg">Contact us</a>
+          <a class="button secondary" href="https://www.f1tenth.racing/">F1TENTH reference</a>
+        </div>
       </section>
     </main>
 
     <footer>
-      <p>F1TENTH NTU</p>
-      <p>Autonomous racing club at NTU Singapore.</p>
+      <div class="footer-brand">
+        <img src="assets/deepspeed-logo.png" alt="" />
+        <span>NTU DeepSpeed</span>
+      </div>
+      <p>Student autonomous racing at Nanyang Technological University.</p>
     </footer>
-
-    <script src="script.js"></script>
   </body>
 </html>
