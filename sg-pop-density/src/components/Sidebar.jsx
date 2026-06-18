@@ -6,7 +6,7 @@ import {
   XAxis,
   YAxis
 } from "recharts";
-import { CircleDot, MapPinned } from "lucide-react";
+import { CircleDot, X } from "lucide-react";
 import {
   formatDecimal,
   formatNumber,
@@ -66,7 +66,9 @@ function SexSplit({ properties }) {
 }
 
 function AgeChart({ data }) {
-  if (!data?.length) {
+  const chartData = Array.isArray(data) ? data : [];
+
+  if (!chartData.length) {
     return (
       <div className="mt-3 flex h-40 items-center justify-center rounded-lg border border-white/10 bg-black/20 text-[12px] text-slate-500">
         No age breakdown available.
@@ -77,7 +79,7 @@ function AgeChart({ data }) {
   return (
     <div className="mt-3 h-48 rounded-lg border border-white/10 bg-black/20 p-2">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ left: -22, right: 4, top: 10, bottom: 0 }}>
+        <BarChart data={chartData} margin={{ left: -22, right: 4, top: 10, bottom: 0 }}>
           <XAxis
             dataKey="age"
             tick={{ fill: "#94a3b8", fontSize: 10 }}
@@ -108,45 +110,183 @@ function AgeChart({ data }) {
   );
 }
 
-export default function Sidebar({ feature }) {
-  const properties = feature?.properties;
-  const hasData = properties?.has_data;
+function MiniBar({ label, value, color = "#5eead4" }) {
+  const numeric = Number(value);
+  const width = Number.isFinite(numeric) ? Math.max(0, Math.min(numeric, 100)) : 0;
 
   return (
-    <aside className="civic-panel fixed inset-x-3 bottom-3 z-20 max-h-[48vh] overflow-hidden rounded-lg lg:bottom-5 lg:left-auto lg:right-5 lg:top-[146px] lg:flex lg:w-[390px] lg:max-h-none lg:flex-col">
-      <div className="thin-scrollbar h-full overflow-y-auto p-4 lg:p-5">
-        {!properties ? (
-          <div className="flex min-h-40 flex-col justify-center lg:min-h-64">
-            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg border border-teal-200/20 bg-teal-300/10 text-teal-200">
-              <MapPinned size={22} />
-            </div>
-            <p className="text-[15px] font-semibold text-white">
-              Select a subzone to inspect population structure.
-            </p>
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-3 text-[11px]">
+        <span className="font-medium text-slate-400">{label}</span>
+        <span className="font-semibold text-slate-100">{formatPercent(value)}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div className="h-full rounded-full" style={{ width: `${width}%`, backgroundColor: color }} />
+      </div>
+    </div>
+  );
+}
+
+function LandUseMix({ properties }) {
+  const segments = [
+    ["Residential", properties?.residential_land_share, "#5eead4"],
+    ["Commercial", properties?.commercial_land_share, "#fbbf24"],
+    ["Industrial", properties?.industrial_land_share, "#fb7185"],
+    ["Park/open", properties?.park_open_space_share, "#86efac"],
+    ["Transport", properties?.transport_utilities_land_share, "#93c5fd"],
+    ["Education", properties?.education_institution_land_share, "#c4b5fd"],
+    ["Other", properties?.other_land_share, "#94a3b8"]
+  ];
+
+  const hasAny = segments.some(([, value]) => Number.isFinite(Number(value)));
+  if (!hasAny) {
+    return <p className="mt-3 text-[12px] text-slate-500">No land-use overlay data.</p>;
+  }
+
+  return (
+    <div className="mt-3">
+      <div className="flex h-3 overflow-hidden rounded-full bg-white/10">
+        {segments.map(([label, value, color]) => (
+          <div
+            key={label}
+            title={`${label}: ${formatPercent(value)}`}
+            style={{
+              width: `${Math.max(0, Number(value) || 0)}%`,
+              backgroundColor: color
+            }}
+          />
+        ))}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        {segments.slice(0, 6).map(([label, value, color]) => (
+          <MiniBar key={label} label={label} value={value} color={color} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EthnicProfile({ properties }) {
+  const rows = [
+    ["Chinese", properties?.chinese_share, "#5eead4"],
+    ["Malay", properties?.malay_share, "#fbbf24"],
+    ["Indian", properties?.indian_share, "#93c5fd"],
+    ["Others", properties?.others_share, "#f0abfc"]
+  ];
+
+  return (
+    <div className="mt-3 space-y-3">
+      {rows.map(([label, value, color]) => (
+        <MiniBar key={label} label={label} value={value} color={color} />
+      ))}
+      <StatRow
+        label="Ethnic diversity index"
+        value={formatDecimal(properties?.ethnic_diversity_index, 3)}
+      />
+    </div>
+  );
+}
+
+function UrbanContext({ properties }) {
+  const noTransport =
+    properties?.mrt_stations_inside === null &&
+    properties?.bus_stops_inside === null &&
+    properties?.transport_score === null;
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div>
+        <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+          Land-use mix
+        </p>
+        <LandUseMix properties={properties} />
+      </div>
+
+      <div className="rounded-lg border border-white/10 bg-black/20 px-3">
+        <StatRow
+          label="Hawker centres inside"
+          value={formatNumber(properties?.hawker_centres_inside)}
+        />
+        <StatRow
+          label="Hawker per 100k residents"
+          value={formatDecimal(properties?.hawker_per_100k_residents, 1)}
+        />
+        {noTransport ? (
+          <div className="border-b border-white/10 py-2.5 text-[12px] font-medium text-slate-400">
+            No transport data
           </div>
         ) : (
           <>
+            <StatRow
+              label="MRT stations inside"
+              value={formatNumber(properties?.mrt_stations_inside)}
+            />
+            <StatRow
+              label="Bus stops inside"
+              value={formatNumber(properties?.bus_stops_inside)}
+            />
+            <StatRow label="Transport score" value={formatDecimal(properties?.transport_score, 1)} />
+          </>
+        )}
+        <StatRow label="Amenity score" value={formatDecimal(properties?.amenity_score, 1)} />
+        <StatRow label="Access gap score" value={formatDecimal(properties?.access_gap_score, 1)} />
+      </div>
+    </div>
+  );
+}
+
+export default function Sidebar({ feature, mode = "subzone", onClose }) {
+  const properties = feature?.properties;
+  const hasData = properties?.has_data;
+  const isElectoral = mode === "electoral";
+
+  if (!properties) return null;
+
+  return (
+    <aside className="civic-panel fixed inset-x-3 bottom-3 z-20 max-h-[48vh] overflow-hidden rounded-lg lg:bottom-5 lg:left-auto lg:right-5 lg:top-[218px] lg:flex lg:w-[390px] lg:max-h-none lg:flex-col">
+      <div className="thin-scrollbar h-full overflow-y-auto p-4 lg:p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-teal-200">
-                  Selected Subzone
+                  {isElectoral ? "Selected GRC/SMC" : "Selected Subzone"}
                 </p>
                 <h2 className="mt-2 font-display text-2xl font-bold leading-7 text-white">
-                  {titleCase(properties.subzone_name)}
+                  {isElectoral
+                    ? titleCase(properties.electoral_name)
+                    : titleCase(properties.subzone_name)}
                 </h2>
                 <p className="mt-1 text-[13px] font-medium text-slate-400">
-                  {titleCase(properties.planning_area)} · {titleCase(properties.region)}
+                  {isElectoral
+                    ? titleCase(properties.electoral_type)
+                    : `${titleCase(properties.planning_area)} · ${titleCase(properties.region)}`}
                 </p>
               </div>
-              <CircleDot className="mt-1 shrink-0 text-teal-200" size={20} />
+              <div className="flex items-center gap-2">
+                <CircleDot className="shrink-0 text-teal-200" size={20} />
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-white/10 hover:text-white"
+                  aria-label="Close inspector"
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
+
+            {isElectoral ? (
+              <p className="mt-4 rounded-lg border border-amber-200/20 bg-amber-200/10 p-3 text-[12px] leading-5 text-amber-50/85">
+                Estimated by area-weighted overlay of 2020 census subzones onto 2025 electoral boundaries.
+              </p>
+            ) : null}
 
             {!hasData ? (
               <div className="mt-6 rounded-lg border border-white/10 bg-black/25 p-4">
                 <p className="text-sm font-semibold text-white">No data</p>
                 <p className="mt-2 text-[13px] leading-6 text-slate-400">
-                  This boundary did not match a Census 2020 subzone row. Run
-                  the preprocessing script to review unmatched names.
+                  This boundary does not have matched Census 2020 metrics. Run
+                  the preprocessing script to review unmatched names or missing
+                  electoral data.
                 </p>
               </div>
             ) : (
@@ -166,40 +306,52 @@ export default function Sidebar({ feature }) {
                     value={formatNumber(properties.density_per_km2)}
                   />
                   <StatRow
-                    label="Youth 0-14"
-                    value={formatNumber(properties.youth_0_14)}
+                    label="Youth 0-14 share"
+                    value={formatPercent(properties.youth_share)}
                   />
                   <StatRow
-                    label="Working age 15-64"
-                    value={formatNumber(properties.working_age_15_64)}
+                    label="Working-age 15-64 share"
+                    value={formatPercent(properties.working_age_share)}
                   />
                   <StatRow
-                    label="Elderly 65+"
-                    value={formatNumber(properties.elderly_65_plus)}
-                  />
-                  <StatRow
-                    label="Elderly share %"
+                    label="Elderly 65+ share"
                     value={formatPercent(properties.elderly_share)}
                   />
                 </div>
 
+                {!isElectoral ? (
+                  <>
+                    <section className="mt-5">
+                      <h3 className="text-[13px] font-bold text-white">
+                        Age Breakdown
+                      </h3>
+                      <AgeChart data={properties.age_breakdown} />
+                    </section>
+
+                    <section className="mt-5">
+                      <h3 className="text-[13px] font-bold text-white">
+                        Male/Female Split
+                      </h3>
+                      <SexSplit properties={properties} />
+                    </section>
+                  </>
+                ) : null}
+
                 <section className="mt-5">
                   <h3 className="text-[13px] font-bold text-white">
-                    Age Breakdown
+                    Ethnic Group Profile
                   </h3>
-                  <AgeChart data={properties.age_breakdown} />
+                  <EthnicProfile properties={properties} />
                 </section>
 
                 <section className="mt-5">
                   <h3 className="text-[13px] font-bold text-white">
-                    Male/Female Split
+                    Urban Context
                   </h3>
-                  <SexSplit properties={properties} />
+                  <UrbanContext properties={properties} />
                 </section>
               </>
             )}
-          </>
-        )}
       </div>
     </aside>
   );

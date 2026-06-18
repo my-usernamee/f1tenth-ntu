@@ -2,6 +2,10 @@ import { Search, X } from "lucide-react";
 import MetricToggle from "@/components/MetricToggle";
 
 export default function TopBar({
+  mode,
+  onModeChange,
+  metricCategory,
+  onMetricCategoryChange,
   metric,
   onMetricChange,
   query,
@@ -11,7 +15,7 @@ export default function TopBar({
 }) {
   return (
     <header className="pointer-events-none fixed left-0 right-0 top-0 z-40 px-4 pt-4 lg:px-5">
-      <div className="civic-panel pointer-events-auto mx-auto grid max-w-[1540px] gap-3 rounded-lg p-3 lg:grid-cols-[minmax(260px,1fr)_minmax(320px,420px)] lg:items-center">
+      <div className="civic-panel pointer-events-auto mx-auto grid max-w-[1540px] gap-3 rounded-lg p-3 lg:grid-cols-[minmax(260px,1fr)_minmax(320px,460px)] lg:items-center">
         <div className="min-w-0">
           <h1 className="font-display text-[22px] font-bold leading-7 text-white">
             SG Population Atlas
@@ -29,7 +33,7 @@ export default function TopBar({
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search planning area or subzone"
+            placeholder={mode === "electoral" ? "Search GRC or SMC" : "Search planning area or subzone"}
             className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-9 text-[13px] font-medium text-white outline-none transition placeholder:text-slate-500 focus:border-teal-300/70 focus:bg-black/35"
           />
           {query ? (
@@ -65,7 +69,14 @@ export default function TopBar({
         </div>
 
         <div className="lg:col-span-2">
-          <MetricToggle metric={metric} onMetricChange={onMetricChange} />
+          <MetricToggle
+            mode={mode}
+            onModeChange={onModeChange}
+            metricCategory={metricCategory}
+            onMetricCategoryChange={onMetricCategoryChange}
+            metric={metric}
+            onMetricChange={onMetricChange}
+          />
         </div>
       </div>
     </header>

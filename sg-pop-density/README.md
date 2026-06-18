@@ -1,34 +1,32 @@
 # SG Population Atlas
 
-SG Population Atlas is a polished, map-first Singapore population density visualizer built with Next.js, React, Tailwind CSS, MapLibre GL JS, and Recharts.
+SG Population Atlas is a map-first Singapore civic-data visualizer built with Next.js, React, Tailwind CSS, MapLibre GL JS, and Recharts.
 
-It enriches Master Plan 2019 subzone boundaries with Census 2020 resident population data, then serves the final GeoJSON statically from `public/data`.
+The app loads static GeoJSON from `public/data` only. Preprocessing enriches URA Master Plan 2019 subzones with Census 2020 population, ethnic group, land-use, hawker-centre, optional OneMap transport, and optional GE2025 GRC/SMC boundary estimates.
 
-## Project Structure
+## Required Datasets
+
+Place these files in `data/raw/`:
 
 ```text
-sg-pop-density/
-├── data/raw/
-│   ├── resident-population-census-2020.csv
-│   └── master-plan-2019-subzone.geojson
-├── public/data/
-│   └── sg-subzone-population.geojson
-├── scripts/
-│   └── process_population.py
-├── src/
-│   ├── app/
-│   │   ├── page.jsx
-│   │   └── globals.css
-│   ├── components/
-│   │   ├── MapView.jsx
-│   │   ├── Sidebar.jsx
-│   │   ├── Legend.jsx
-│   │   ├── MetricToggle.jsx
-│   │   └── TopBar.jsx
-│   └── lib/
-│       ├── colorScale.js
-│       └── formatters.js
+data/raw/master-plan-2019-subzone.geojson
+data/raw/resident-population-age-sex-2020.csv
+data/raw/resident-population-ethnic-sex-2020.csv
+data/raw/master-plan-2019-land-use.geojson
+data/raw/hawker-centres.geojson
+data/raw/electoral-boundary-2025.geojson
 ```
+
+The app still runs if `electoral-boundary-2025.geojson` is missing, but GRC/SMC mode will show an empty-state message until that file is added and preprocessing is rerun.
+
+## Optional Transport Files
+
+```text
+data/raw/mrt-stations.geojson
+data/raw/bus-stops.geojson
+```
+
+If these are absent, the script can try OneMap during preprocessing. If neither local files nor OneMap data are available, MRT/bus fields are written as `null` and the UI shows “No transport data.”
 
 ## Install
 
@@ -36,29 +34,37 @@ sg-pop-density/
 npm install
 ```
 
-## Raw Data
-
-Place the datasets here:
-
-```text
-data/raw/resident-population-census-2020.csv
-data/raw/master-plan-2019-subzone.geojson
-```
-
-The current workspace already includes copies from:
-
-```text
-/Users/hari/Downloads/ResidentPopulationbyPlanningAreaSubzoneofResidenceAgeGroupandSexCensusofPopulation2020.csv
-/Users/hari/Downloads/MasterPlan2019SubzoneBoundaryNoSeaGEOJSON.geojson
-```
-
 ## Python Setup
 
 ```bash
-pip install pandas geopandas
+pip install pandas geopandas shapely requests
 ```
 
-GeoPandas is optional for the included Master Plan file because it already contains `SHAPE.AREA`. If another boundary file lacks area properties, the script can use GeoPandas to calculate area in EPSG:3414.
+GeoPandas and Shapely are needed for point-in-polygon amenity counts, land-use overlay, and GRC/SMC area-weighted aggregation.
+
+## OneMap Transport Fetch
+
+OneMap is not called by the frontend. To fetch MRT/LRT and bus-stop point data during preprocessing, set a token:
+
+```bash
+export ONEMAP_TOKEN="your-token"
+```
+
+The script uses OneMap theme retrieval and caches successful responses to:
+
+```text
+data/cache/onemap-mrt-stations.geojson
+data/cache/onemap-bus-stops.geojson
+```
+
+If OneMap theme query names differ, override them:
+
+```bash
+export ONEMAP_MRT_THEME="mrt_stations"
+export ONEMAP_BUS_THEME="bus_stops"
+```
+
+Local `data/raw/mrt-stations.geojson` and `data/raw/bus-stops.geojson` take priority over cache and OneMap.
 
 ## Preprocess Data
 
@@ -68,15 +74,24 @@ python scripts/process_population.py
 
 The script:
 
-- inspects CSV headers before mapping columns
-- normalizes join keys with uppercase, trimming, and repeated-space removal
-- joins by planning area and subzone
-- calculates population totals, area, density, youth, working-age, elderly, and elderly-share metrics
-- prints join success rate
-- prints unmatched GeoJSON subzones and unused Census rows
-- writes `public/data/sg-subzone-population.geojson`
+- prints loaded files, detected CSV columns, and detected GeoJSON properties
+- normalizes join keys with uppercase, trimming, and repeated-space collapse
+- joins age/sex and ethnic group/sex Census data by planning area + subzone
+- calculates population density, age shares, ethnic group shares, and ethnic diversity index
+- calculates land-use composition with polygon intersections
+- counts hawker centres inside each subzone/GRC polygon
+- counts MRT stations and bus stops inside each polygon when OneMap/local transport data exists
+- estimates GRC/SMC metrics by area-weighted overlay of 2020 census subzones onto 2025 electoral boundaries
+- writes missing values as `null`
+- exports:
 
-If your CSV column names differ, adjust the commented column mapping block in `scripts/process_population.py`.
+```text
+public/data/sg-subzone-enriched.geojson
+public/data/sg-electoral-2025-enriched.geojson
+public/data/sg-subzone-population.geojson
+```
+
+`sg-subzone-population.geojson` is kept as a compatibility copy.
 
 ## Run Locally
 
@@ -84,27 +99,40 @@ If your CSV column names differ, adjust the commented column mapping block in `s
 npm run dev
 ```
 
-Open the local URL shown by Next.js, usually:
+Open:
 
 ```text
 http://localhost:3000
 ```
 
+## Frontend Features
+
+- Subzone and GRC/SMC mode dropdown
+- Metric category and metric dropdowns
+- Dynamic choropleth legend with “No data”
+- Hidden inspection panel until an area is selected
+- Subzone inspector with population, age structure, sex split, ethnic group profile, land-use, and amenities
+- GRC/SMC inspector with estimated metrics and an area-weighted overlay disclaimer
+- Floating compare mode with two slots and compact comparison drawer
+- Thicker boundaries, stronger hover/selected outlines, planning area labels, high-zoom subzone labels, prominent GRC/SMC labels, and subtle landmark labels
+
 ## Deploy To Vercel
 
-1. Push this project to GitHub.
-2. Import the repository in Vercel.
-3. Set the project root to `sg-pop-density` if this folder lives inside a larger repo.
-4. Use the default Next.js build command:
+1. Push the repository to GitHub.
+2. Import it in Vercel.
+3. If this app is inside a larger repo, set the Vercel project root to `sg-pop-density`.
+4. Build with:
 
 ```bash
 npm run build
 ```
 
-5. Ensure `public/data/sg-subzone-population.geojson` is committed or generated before deployment.
+5. Commit the generated files in `public/data` or run preprocessing before deployment.
 
 ## Notes
 
 - No backend is required for v1.
 - The map uses MapLibre GL JS with CARTO dark raster tiles, so no Mapbox token is needed.
-- Missing population data renders grey and appears as “No data” in tooltips and the sidebar.
+- GRC/SMC values are approximate because URA subzones and electoral boundaries are different systems.
+- “Ethnic group” follows official census wording.
+- Missing values render as “No data”.

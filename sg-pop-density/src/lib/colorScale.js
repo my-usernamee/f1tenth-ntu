@@ -1,41 +1,172 @@
 export const NO_DATA_COLOR = "#434a51";
 
-export const METRICS = [
+export const MODES = [
+  { key: "subzone", label: "Subzone" },
+  { key: "electoral", label: "GRC/SMC" }
+];
+
+export const METRIC_CATEGORIES = [
   {
-    key: "density_per_km2",
-    label: "Population density",
-    shortLabel: "Density",
-    unit: "/ km²"
+    key: "population",
+    label: "Population",
+    metrics: [
+      {
+        key: "density_per_km2",
+        label: "Population density",
+        shortLabel: "Population density / km²",
+        unit: "/ km²"
+      },
+      {
+        key: "total_population",
+        label: "Total population",
+        shortLabel: "Total population",
+        unit: "people"
+      }
+    ]
   },
   {
-    key: "total_population",
-    label: "Total population",
-    shortLabel: "Population",
-    unit: "people"
+    key: "age",
+    label: "Age structure",
+    metrics: [
+      {
+        key: "youth_share",
+        label: "Youth 0-14 share",
+        shortLabel: "Youth 0-14 share %",
+        unit: "%"
+      },
+      {
+        key: "working_age_share",
+        label: "Working-age 15-64 share",
+        shortLabel: "Working-age 15-64 share %",
+        unit: "%"
+      },
+      {
+        key: "elderly_share",
+        label: "Elderly 65+ share",
+        shortLabel: "Elderly 65+ share %",
+        unit: "%"
+      }
+    ]
   },
   {
-    key: "elderly_65_plus",
-    label: "Elderly 65+",
-    shortLabel: "Elderly",
-    unit: "people"
+    key: "ethnic",
+    label: "Ethnic group",
+    metrics: [
+      {
+        key: "chinese_share",
+        label: "Chinese share",
+        shortLabel: "Chinese share %",
+        unit: "%"
+      },
+      {
+        key: "malay_share",
+        label: "Malay share",
+        shortLabel: "Malay share %",
+        unit: "%"
+      },
+      {
+        key: "indian_share",
+        label: "Indian share",
+        shortLabel: "Indian share %",
+        unit: "%"
+      },
+      {
+        key: "others_share",
+        label: "Others share",
+        shortLabel: "Others share %",
+        unit: "%"
+      },
+      {
+        key: "ethnic_diversity_index",
+        label: "Ethnic diversity",
+        shortLabel: "Ethnic diversity index",
+        unit: "index"
+      }
+    ]
   },
   {
-    key: "youth_0_14",
-    label: "Youth 0-14",
-    shortLabel: "Youth",
-    unit: "people"
+    key: "land_use",
+    label: "Land use",
+    metrics: [
+      {
+        key: "residential_land_share",
+        label: "Residential land share",
+        shortLabel: "Residential land share %",
+        unit: "%"
+      },
+      {
+        key: "park_open_space_share",
+        label: "Park/open-space share",
+        shortLabel: "Park/open-space share %",
+        unit: "%"
+      },
+      {
+        key: "commercial_land_share",
+        label: "Commercial land share",
+        shortLabel: "Commercial land share %",
+        unit: "%"
+      },
+      {
+        key: "industrial_land_share",
+        label: "Industrial land share",
+        shortLabel: "Industrial land share %",
+        unit: "%"
+      }
+    ]
   },
   {
-    key: "working_age_15_64",
-    label: "Working age 15-64",
-    shortLabel: "Working age",
-    unit: "people"
+    key: "amenities",
+    label: "Amenities",
+    metrics: [
+      {
+        key: "hawker_centres_inside",
+        label: "Hawker centres inside",
+        shortLabel: "Hawker centres inside",
+        unit: "centres"
+      },
+      {
+        key: "hawker_per_100k_residents",
+        label: "Hawker per 100k residents",
+        shortLabel: "Hawker per 100k residents",
+        unit: "/100k"
+      },
+      {
+        key: "mrt_stations_inside",
+        label: "MRT stations inside",
+        shortLabel: "MRT stations inside",
+        unit: "stations"
+      },
+      {
+        key: "bus_stops_inside",
+        label: "Bus stops inside",
+        shortLabel: "Bus stops inside",
+        unit: "stops"
+      },
+      {
+        key: "amenity_score",
+        label: "Amenity score",
+        shortLabel: "Amenity score",
+        unit: "/100"
+      },
+      {
+        key: "access_gap_score",
+        label: "Access gap score",
+        shortLabel: "Access gap score",
+        unit: "/100"
+      }
+    ]
   }
 ];
+
+export const METRICS = METRIC_CATEGORIES.flatMap((category) => category.metrics);
 
 export const METRIC_BY_KEY = Object.fromEntries(
   METRICS.map((metric) => [metric.key, metric])
 );
+
+export function metricsForCategory(categoryKey) {
+  return METRIC_CATEGORIES.find((category) => category.key === categoryKey)?.metrics || METRIC_CATEGORIES[0].metrics;
+}
 
 const PALETTE = [
   "#16363c",

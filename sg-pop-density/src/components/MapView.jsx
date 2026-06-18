@@ -6,20 +6,41 @@ import { buildFillExpression } from "@/lib/colorScale";
 import { formatNumber, titleCase } from "@/lib/formatters";
 
 const SOURCE_ID = "subzones";
+const UNDERLAY_SOURCE_ID = "subzone-underlay";
+const UNDERLAY_LINE_LAYER_ID = "subzone-underlay-line";
 const FILL_LAYER_ID = "subzone-fill";
 const LINE_LAYER_ID = "subzone-line";
 const HOVER_LAYER_ID = "subzone-hover-line";
 const SELECTED_LAYER_ID = "subzone-selected-line";
 const SELECTED_BOUNDARY_SOURCE_ID = "selected-boundary";
 const SELECTED_BOUNDARY_LAYER_ID = "selected-boundary-line";
+const PLANNING_LABEL_SOURCE_ID = "planning-labels";
+const SUBZONE_LABEL_SOURCE_ID = "subzone-labels";
+const ELECTORAL_LABEL_SOURCE_ID = "electoral-labels";
+const LANDMARK_SOURCE_ID = "landmark-labels";
 
 const EMPTY_FEATURE_COLLECTION = {
   type: "FeatureCollection",
   features: []
 };
 
+const LANDMARKS = [
+  ["Changi Airport", 103.9915, 1.3644],
+  ["Marina Bay", 103.861, 1.2834],
+  ["Orchard", 103.8318, 1.3048],
+  ["Jurong East", 103.7434, 1.3331],
+  ["Woodlands", 103.786, 1.436],
+  ["Tampines", 103.9451, 1.3526],
+  ["Punggol", 103.9023, 1.4052],
+  ["Sentosa", 103.8303, 1.2494],
+  ["NTU", 103.682, 1.3483],
+  ["NUS", 103.7764, 1.2966],
+  ["CBD", 103.8517, 1.2847]
+];
+
 const BASE_STYLE = {
   version: 8,
+  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
   sources: {
     cartoDark: {
       type: "raster",
@@ -61,6 +82,87 @@ export function getFeatureBounds(features) {
     });
   });
   return bounds.isEmpty() ? null : bounds;
+}
+
+function centerOfFeatures(features) {
+  const bounds = getFeatureBounds(features);
+  if (!bounds) return null;
+  const center = bounds.getCenter();
+  return [center.lng, center.lat];
+}
+
+function buildSubzoneLabelGeoJson(features = []) {
+  return {
+    type: "FeatureCollection",
+    features: features
+      .map((feature) => {
+        const center = centerOfFeatures([feature]);
+        if (!center) return null;
+        return {
+          type: "Feature",
+          properties: {
+            label: titleCase(feature.properties?.subzone_name || feature.properties?.subzone)
+          },
+          geometry: { type: "Point", coordinates: center }
+        };
+      })
+      .filter(Boolean)
+  };
+}
+
+function buildPlanningLabelGeoJson(features = []) {
+  const groups = new Map();
+  features.forEach((feature) => {
+    const name = feature.properties?.planning_area;
+    if (!name) return;
+    const key = String(name);
+    groups.set(key, [...(groups.get(key) || []), feature]);
+  });
+
+  return {
+    type: "FeatureCollection",
+    features: [...groups.entries()]
+      .map(([name, groupFeatures]) => {
+        const center = centerOfFeatures(groupFeatures);
+        if (!center) return null;
+        return {
+          type: "Feature",
+          properties: { label: titleCase(name) },
+          geometry: { type: "Point", coordinates: center }
+        };
+      })
+      .filter(Boolean)
+  };
+}
+
+function buildElectoralLabelGeoJson(features = []) {
+  return {
+    type: "FeatureCollection",
+    features: features
+      .map((feature) => {
+        const center = centerOfFeatures([feature]);
+        if (!center) return null;
+        return {
+          type: "Feature",
+          properties: {
+            label: titleCase(feature.properties?.electoral_name)
+          },
+          geometry: { type: "Point", coordinates: center }
+        };
+      })
+      .filter(Boolean)
+  };
+}
+
+function buildLandmarkGeoJson() {
+  return {
+    type: "FeatureCollection",
+    features: LANDMARKS.map(([label, lng, lat]) => ({
+      type: "Feature",
+      properties: { label },
+      geometry: { type: "Point", coordinates: [lng, lat] }
+    }))
+  };
 }
 
 function tooltipStyle(point) {
@@ -141,25 +243,30 @@ function safeFitBounds(map, bounds, options) {
   }
 }
 
-function getResponsivePadding() {
+function getResponsivePadding(hasInspector = false) {
   if (typeof window !== "undefined" && window.innerWidth < 1024) {
-    return { top: 380, right: 24, bottom: 220, left: 24 };
+    return { top: 300, right: 24, bottom: hasInspector ? 220 : 130, left: 24 };
   }
-  return { top: 162, right: 430, bottom: 44, left: 44 };
+  return { top: 218, right: hasInspector ? 430 : 44, bottom: 70, left: 44 };
 }
 
 export default function MapView({
   geojson,
+  subzoneUnderlay,
+  mode = "subzone",
   metric,
   colorStops,
   selectedIds,
   selectedBoundaryFeatures = [],
+  hasInspector = false,
   onSelectFeature,
   focusRequest
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const dataRef = useRef(geojson);
+  const underlayRef = useRef(subzoneUnderlay || EMPTY_FEATURE_COLLECTION);
+  const modeRef = useRef(mode);
   const fillExpressionRef = useRef(null);
   const selectFeatureRef = useRef(onSelectFeature);
   const [hovered, setHovered] = useState(null);
@@ -173,6 +280,14 @@ export default function MapView({
   useEffect(() => {
     dataRef.current = geojson;
   }, [geojson]);
+
+  useEffect(() => {
+    underlayRef.current = subzoneUnderlay || EMPTY_FEATURE_COLLECTION;
+  }, [subzoneUnderlay]);
+
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
 
   useEffect(() => {
     fillExpressionRef.current = fillExpression;
@@ -213,13 +328,47 @@ export default function MapView({
     map.on("load", () => {
       map.addSource(SOURCE_ID, {
         type: "geojson",
-        data: dataRef.current,
+        data: dataRef.current || EMPTY_FEATURE_COLLECTION,
         promoteId: "atlas_id"
+      });
+      map.addSource(UNDERLAY_SOURCE_ID, {
+        type: "geojson",
+        data: modeRef.current === "electoral" ? underlayRef.current : EMPTY_FEATURE_COLLECTION
       });
 
       map.addSource(SELECTED_BOUNDARY_SOURCE_ID, {
         type: "geojson",
         data: EMPTY_FEATURE_COLLECTION
+      });
+      map.addSource(PLANNING_LABEL_SOURCE_ID, {
+        type: "geojson",
+        data: buildPlanningLabelGeoJson(dataRef.current.features || [])
+      });
+      map.addSource(SUBZONE_LABEL_SOURCE_ID, {
+        type: "geojson",
+        data: modeRef.current === "subzone"
+          ? buildSubzoneLabelGeoJson(dataRef.current?.features || [])
+          : EMPTY_FEATURE_COLLECTION
+      });
+      map.addSource(ELECTORAL_LABEL_SOURCE_ID, {
+        type: "geojson",
+        data: modeRef.current === "electoral"
+          ? buildElectoralLabelGeoJson(dataRef.current?.features || [])
+          : EMPTY_FEATURE_COLLECTION
+      });
+      map.addSource(LANDMARK_SOURCE_ID, {
+        type: "geojson",
+        data: buildLandmarkGeoJson()
+      });
+
+      map.addLayer({
+        id: UNDERLAY_LINE_LAYER_ID,
+        type: "line",
+        source: UNDERLAY_SOURCE_ID,
+        paint: {
+          "line-color": "rgba(226, 232, 240, 0.18)",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 9, 0.45, 12, 0.9]
+        }
       });
 
       map.addLayer({
@@ -242,8 +391,10 @@ export default function MapView({
         type: "line",
         source: SOURCE_ID,
         paint: {
-          "line-color": "rgba(226, 232, 240, 0.18)",
-          "line-width": 0.8
+          "line-color": modeRef.current === "electoral" ? "rgba(250, 204, 21, 0.82)" : "rgba(226, 232, 240, 0.42)",
+          "line-width": modeRef.current === "electoral"
+            ? ["interpolate", ["linear"], ["zoom"], 9, 2.6, 12, 4.2]
+            : ["interpolate", ["linear"], ["zoom"], 9, 1.35, 12, 2.0]
         }
       });
 
@@ -254,7 +405,7 @@ export default function MapView({
         filter: ["==", ["get", "atlas_id"], ""],
         paint: {
           "line-color": "#d9fff8",
-          "line-width": 2.2
+          "line-width": ["interpolate", ["linear"], ["zoom"], 9, 3.8, 12, 5.2]
         }
       });
 
@@ -265,7 +416,7 @@ export default function MapView({
         filter: ["==", ["get", "atlas_id"], ""],
         paint: {
           "line-color": "#fbbf24",
-          "line-width": 3.1
+          "line-width": ["interpolate", ["linear"], ["zoom"], 9, 4.8, 12, 6.4]
         }
       });
 
@@ -281,10 +432,87 @@ export default function MapView({
         }
       });
 
+      map.addLayer({
+        id: "planning-area-labels",
+        type: "symbol",
+        source: PLANNING_LABEL_SOURCE_ID,
+        minzoom: 10.2,
+        layout: {
+          "text-field": ["get", "label"],
+          "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 10, 10, 12, 13],
+          "text-letter-spacing": 0.05,
+          "text-transform": "uppercase",
+          "text-allow-overlap": false
+        },
+        paint: {
+          "text-color": "rgba(224, 242, 254, 0.72)",
+          "text-halo-color": "rgba(7, 11, 15, 0.9)",
+          "text-halo-width": 1.2
+        }
+      });
+
+      map.addLayer({
+        id: "electoral-labels",
+        type: "symbol",
+        source: ELECTORAL_LABEL_SOURCE_ID,
+        minzoom: 10.1,
+        layout: {
+          "text-field": ["get", "label"],
+          "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 10, 12, 12, 16],
+          "text-letter-spacing": 0.02,
+          "text-transform": "uppercase",
+          "text-allow-overlap": false
+        },
+        paint: {
+          "text-color": "rgba(253, 224, 71, 0.86)",
+          "text-halo-color": "rgba(7, 11, 15, 0.94)",
+          "text-halo-width": 1.6
+        }
+      });
+
+      map.addLayer({
+        id: "subzone-labels",
+        type: "symbol",
+        source: SUBZONE_LABEL_SOURCE_ID,
+        minzoom: 12.15,
+        layout: {
+          "text-field": ["get", "label"],
+          "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
+          "text-size": 10,
+          "text-allow-overlap": false
+        },
+        paint: {
+          "text-color": "rgba(226, 232, 240, 0.62)",
+          "text-halo-color": "rgba(7, 11, 15, 0.86)",
+          "text-halo-width": 1
+        }
+      });
+
+      map.addLayer({
+        id: "landmark-labels",
+        type: "symbol",
+        source: LANDMARK_SOURCE_ID,
+        minzoom: 11.35,
+        layout: {
+          "text-field": ["get", "label"],
+          "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
+          "text-size": 12,
+          "text-offset": [0, 0.8],
+          "text-allow-overlap": false
+        },
+        paint: {
+          "text-color": "#fef3c7",
+          "text-halo-color": "rgba(7, 11, 15, 0.9)",
+          "text-halo-width": 1.3
+        }
+      });
+
       const bounds = getFeatureBounds(dataRef.current.features || []);
       if (bounds) {
         safeFitBounds(map, bounds, {
-          padding: getResponsivePadding(),
+          padding: getResponsivePadding(false),
           duration: 900,
           maxZoom: 11.2
         });
@@ -332,16 +560,49 @@ export default function MapView({
     const source = map.getSource(SOURCE_ID);
     if (source) {
       source.setData(geojson);
+      map.getSource(PLANNING_LABEL_SOURCE_ID)?.setData(buildPlanningLabelGeoJson(geojson.features || []));
+      map.getSource(SUBZONE_LABEL_SOURCE_ID)?.setData(buildSubzoneLabelGeoJson(geojson.features || []));
       const bounds = getFeatureBounds(geojson.features || []);
       if (bounds) {
         safeFitBounds(map, bounds, {
-          padding: getResponsivePadding(),
+          padding: getResponsivePadding(hasInspector),
           duration: 700,
           maxZoom: 11.2
         });
       }
     }
-  }, [geojson]);
+  }, [geojson, hasInspector]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.isStyleLoaded()) return;
+    map.getSource(UNDERLAY_SOURCE_ID)?.setData(
+      mode === "electoral" ? (subzoneUnderlay || EMPTY_FEATURE_COLLECTION) : EMPTY_FEATURE_COLLECTION
+    );
+    map.getSource(PLANNING_LABEL_SOURCE_ID)?.setData(
+      mode === "subzone" ? buildPlanningLabelGeoJson(geojson.features || []) : EMPTY_FEATURE_COLLECTION
+    );
+    map.getSource(SUBZONE_LABEL_SOURCE_ID)?.setData(
+      mode === "subzone" ? buildSubzoneLabelGeoJson(geojson.features || []) : EMPTY_FEATURE_COLLECTION
+    );
+    map.getSource(ELECTORAL_LABEL_SOURCE_ID)?.setData(
+      mode === "electoral" ? buildElectoralLabelGeoJson(geojson.features || []) : EMPTY_FEATURE_COLLECTION
+    );
+    if (map.getLayer(LINE_LAYER_ID)) {
+      map.setPaintProperty(
+        LINE_LAYER_ID,
+        "line-color",
+        mode === "electoral" ? "rgba(250, 204, 21, 0.86)" : "rgba(226, 232, 240, 0.42)"
+      );
+      map.setPaintProperty(
+        LINE_LAYER_ID,
+        "line-width",
+        mode === "electoral"
+          ? ["interpolate", ["linear"], ["zoom"], 9, 2.6, 12, 4.2]
+          : ["interpolate", ["linear"], ["zoom"], 9, 1.35, 12, 2.0]
+      );
+    }
+  }, [geojson, mode, subzoneUnderlay]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -371,11 +632,11 @@ export default function MapView({
     const bounds = getFeatureBounds(focusRequest.features);
     if (!bounds) return;
     safeFitBounds(map, bounds, {
-      padding: getResponsivePadding(),
+      padding: getResponsivePadding(hasInspector),
       duration: 1100,
       maxZoom: focusRequest.features.length === 1 ? 13.2 : 12.2
     });
-  }, [focusRequest]);
+  }, [focusRequest, hasInspector]);
 
   const tooltipProperties = hovered?.properties;
 
@@ -405,10 +666,12 @@ export default function MapView({
           <div className="mb-2 flex items-start justify-between gap-3">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-teal-200">
-                Subzone
+                {mode === "electoral" ? "GRC/SMC" : "Subzone"}
               </p>
               <p className="mt-1 text-sm font-bold text-white">
-                {titleCase(tooltipProperties.subzone_name)}
+                {mode === "electoral"
+                  ? titleCase(tooltipProperties.electoral_name)
+                  : titleCase(tooltipProperties.subzone_name)}
               </p>
             </div>
             {!tooltipProperties.has_data ? (
@@ -419,17 +682,21 @@ export default function MapView({
           </div>
           <dl className="space-y-1.5 text-[12px]">
             <div className="flex justify-between gap-4">
-              <dt className="text-slate-500">Planning Area</dt>
+              <dt className="text-slate-500">{mode === "electoral" ? "Type" : "Planning Area"}</dt>
               <dd className="text-right font-semibold text-slate-200">
-                {titleCase(tooltipProperties.planning_area)}
+                {mode === "electoral"
+                  ? titleCase(tooltipProperties.electoral_type)
+                  : titleCase(tooltipProperties.planning_area)}
               </dd>
             </div>
-            <div className="flex justify-between gap-4">
+            {mode === "subzone" ? (
+              <div className="flex justify-between gap-4">
               <dt className="text-slate-500">Region</dt>
               <dd className="text-right font-semibold text-slate-200">
                 {titleCase(tooltipProperties.region)}
               </dd>
-            </div>
+              </div>
+            ) : null}
             <div className="flex justify-between gap-4">
               <dt className="text-slate-500">Population</dt>
               <dd className="text-right font-semibold text-white">
