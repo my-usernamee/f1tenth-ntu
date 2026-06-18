@@ -131,15 +131,15 @@ export const METRIC_CATEGORIES = [
         unit: "/100k"
       },
       {
-        key: "mrt_stations_inside",
-        label: "MRT stations inside",
-        shortLabel: "MRT stations inside",
+        key: "mrt_lrt_stations_within_800m_boundary",
+        label: "MRT/LRT within 800m of boundary",
+        shortLabel: "MRT/LRT within 800m",
         unit: "stations"
       },
       {
-        key: "bus_stops_inside",
-        label: "Bus stops inside",
-        shortLabel: "Bus stops inside",
+        key: "bus_stops_within_500m_boundary",
+        label: "Bus stops within 500m of boundary",
+        shortLabel: "Bus stops within 500m",
         unit: "stops"
       },
       {

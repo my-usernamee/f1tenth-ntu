@@ -25,8 +25,10 @@ import requests
 
 try:
     import geopandas as gpd
+    from shapely.geometry import Point
 except ImportError:  # pragma: no cover
     gpd = None
+    Point = None
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = ROOT / "data" / "raw"
@@ -43,6 +45,7 @@ MRT_STATIONS_GEOJSON = RAW_DIR / "mrt-stations.geojson"
 BUS_STOPS_GEOJSON = RAW_DIR / "bus-stops.geojson"
 MRT_CACHE_GEOJSON = CACHE_DIR / "onemap-mrt-stations.geojson"
 BUS_CACHE_GEOJSON = CACHE_DIR / "onemap-bus-stops.geojson"
+TRANSPORT_ACCESS_CACHE = CACHE_DIR / "onemap-transport-access.json"
 
 OUTPUT_SUBZONE = PUBLIC_DATA_DIR / "sg-subzone-enriched.geojson"
 OUTPUT_ELECTORAL = PUBLIC_DATA_DIR / "sg-electoral-2025-enriched.geojson"
@@ -51,6 +54,9 @@ OUTPUT_LEGACY = PUBLIC_DATA_DIR / "sg-subzone-population.geojson"
 WGS84 = "EPSG:4326"
 SVY21 = "EPSG:3414"
 SINGAPORE_EXTENTS = "1.16,103.59,1.48,104.08"
+BUS_ACCESS_DISTANCE_M = 500
+MRT_LRT_ACCESS_DISTANCE_M = 800
+MAX_ONEMAP_RADIUS_M = 5000
 
 # COLUMN_MAPPING:
 # The supplied Census 2020 files use one geography column named "Number" and
@@ -259,6 +265,31 @@ def empty_feature_collection() -> dict[str, Any]:
     return {"type": "FeatureCollection", "features": []}
 
 
+def load_dotenv_local() -> None:
+    env_path = ROOT / ".env.local"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def get_onemap_token() -> str | None:
+    for name in ["ONEMAP_TOKEN", "ONEMAP_API_TOKEN", "ONEMAP_ACCESS_TOKEN", "ONEMAP_API_KEY"]:
+        value = os.getenv(name)
+        if value:
+            print(f"OneMap token found via {name}.")
+            return value
+    print("OneMap token missing; transport access fields will be null.")
+    return None
+
+
 def print_loaded(path: Path) -> None:
     if path.exists():
         print(f"Loaded file: {path.relative_to(ROOT)}")
@@ -437,9 +468,18 @@ def load_geodata(path: Path):
 
 def classify_land_use(value: Any) -> str:
     normalized = normalize_name(value)
-    for bucket, labels in LAND_USE_BUCKETS.items():
-        if normalized in labels:
-            return bucket
+    if any(term in normalized for term in ["RESIDENTIAL"]):
+        return "residential_land_share"
+    if any(term in normalized for term in ["BUSINESS 1", "BUSINESS 2", "BUSINESS PARK", "INDUSTRIAL", "PORT", "AIRPORT"]):
+        return "industrial_land_share"
+    if any(term in normalized for term in ["PARK", "OPEN SPACE", "BEACH", "RESERVE SITE", "WATERBODY", "SPORTS", "RECREATION"]):
+        return "park_open_space_share"
+    if any(term in normalized for term in ["ROAD", "TRANSPORT", "MASS RAPID TRANSIT", "RAIL", "UTILITY", "DRAINAGE"]):
+        return "transport_utilities_land_share"
+    if any(term in normalized for term in ["EDUCATIONAL", "CIVIC", "COMMUNITY", "HEALTH", "MEDICAL", "PLACE OF WORSHIP"]):
+        return "education_institution_land_share"
+    if any(term in normalized for term in ["COMMERCIAL", "HOTEL", "WHITE"]):
+        return "commercial_land_share"
     return "other_land_share"
 
 
@@ -457,6 +497,9 @@ def calculate_land_use_shares(polygons_gdf, id_col: str = "atlas_join_key") -> d
     print("Land-use columns detected:")
     print(", ".join(map(str, landuse.columns)))
     description_col = detect_property(landuse.iloc[0].to_dict(), LAND_USE_COLUMN_MAPPING["description"])
+    print(f"Total land-use polygons loaded: {len(landuse)}")
+    unique_values = sorted(str(value) for value in landuse[description_col].dropna().unique())
+    print(f"Unique {description_col} values: {unique_values[:80]}")
     landuse = landuse[[description_col, "geometry"]].copy()
     landuse["land_bucket"] = landuse[description_col].map(classify_land_use)
     landuse = landuse.to_crs(SVY21)
@@ -491,6 +534,12 @@ def calculate_land_use_shares(polygons_gdf, id_col: str = "atlas_join_key") -> d
         if (index + 1) % 80 == 0:
             print(f"  Land-use progress: {index + 1}/{len(polygons)}")
 
+    populated = sum(
+        1 for values in result.values()
+        if any(values.get(field) is not None for field in LAND_USE_FIELDS)
+    )
+    label = "Electoral divisions" if id_col == "electoral_id" else "Subzones"
+    print(f"{label} with land-use shares: {populated}/{len(polygons)}")
     return result
 
 
@@ -610,6 +659,202 @@ def spatial_count_points_in_polygons(polygons_gdf, points_path: Path | None, id_
     return {key: {output_field: int(counts.get(key, 0))} for key in polygons_gdf[id_col].tolist()}
 
 
+def load_transport_cache() -> dict[str, Any]:
+    if not TRANSPORT_ACCESS_CACHE.exists():
+        return {}
+    try:
+        with TRANSPORT_ACCESS_CACHE.open(encoding="utf-8") as f:
+            payload = json.load(f)
+        if isinstance(payload, dict):
+            print("Using cached OneMap transport access...")
+            return payload
+    except Exception as error:
+        print(f"Warning: could not read OneMap transport cache: {error}")
+    return {}
+
+
+def save_transport_cache(cache: dict[str, Any]) -> None:
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    with TRANSPORT_ACCESS_CACHE.open("w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+
+
+def iter_geometry_coords(geometry):
+    if geometry is None:
+        return
+    if hasattr(geometry, "geoms"):
+        for child in geometry.geoms:
+            yield from iter_geometry_coords(child)
+        return
+    if hasattr(geometry, "coords"):
+        for coord in geometry.coords:
+            yield coord
+        return
+    if hasattr(geometry, "exterior"):
+        yield from iter_geometry_coords(geometry.exterior)
+        for interior in getattr(geometry, "interiors", []):
+            yield from iter_geometry_coords(interior)
+
+
+def farthest_boundary_distance(centroid, polygon) -> float:
+    distances = [centroid.distance(Point(x, y)) for x, y, *_ in iter_geometry_coords(polygon.boundary)]
+    return max(distances) if distances else 0.0
+
+
+def parse_onemap_records(payload: Any) -> list[dict[str, Any]]:
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        for key in ["results", "SearchResults", "SrchResults", "data", "value"]:
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def transport_point_svy21(record: dict[str, Any]):
+    x = number_or_none(record.get("X") or record.get("x"))
+    y = number_or_none(record.get("Y") or record.get("y"))
+    if x is not None and y is not None and abs(x) > 180 and abs(y) > 90:
+        return Point(x, y)
+
+    point = point_from_properties(record)
+    if point is None:
+        return None
+    lon, lat = point
+    try:
+        return gpd.GeoSeries([Point(lon, lat)], crs=WGS84).to_crs(SVY21).iloc[0]
+    except Exception:
+        return None
+
+
+def onemap_nearby_transport(lat: float, lon: float, radius: int, transport_type: str, token: str) -> list[dict[str, Any]]:
+    base_url = os.getenv("ONEMAP_NEARBY_TRANSPORT_URL", "https://www.onemap.gov.sg")
+    if transport_type == "bus":
+        endpoint = f"{base_url.rstrip('/')}/api/public/nearbysvc/getNearestBusStops"
+    else:
+        endpoint = f"{base_url.rstrip('/')}/api/public/nearbysvc/getNearestMrtStops"
+    headers = {"Authorization": token, "accept": "application/json"}
+    param_sets = [
+        {"latitude": lat, "longitude": lon, "radius_in_meters": radius},
+    ]
+    timeout = number_or_none(os.getenv("ONEMAP_TRANSPORT_TIMEOUT_SECONDS")) or 6
+    last_error = None
+    for params in param_sets:
+        try:
+            response = requests.get(endpoint, headers=headers, params=params, timeout=timeout)
+            response.raise_for_status()
+            return parse_onemap_records(response.json())
+        except Exception as error:
+            last_error = error
+    raise RuntimeError(last_error)
+
+
+def calculate_onemap_boundary_transport(polygons_gdf, id_col: str, geography_type: str) -> dict[str, dict[str, int | None]]:
+    fields = {
+        "bus_stops_within_500m_boundary": None,
+        "mrt_lrt_stations_within_800m_boundary": None,
+        "bus_stops_inside": None,
+        "mrt_stations_inside": None,
+    }
+    fallback = {key: fields.copy() for key in polygons_gdf[id_col].tolist()}
+    if gpd is None or Point is None:
+        return fallback
+
+    token = get_onemap_token()
+    if not token:
+        return fallback
+
+    print("Fetching OneMap transport access...")
+    cache = load_transport_cache()
+    cache_changed = False
+    polygons = polygons_gdf[[id_col, "geometry"]].to_crs(SVY21).copy()
+    centroids_wgs84 = polygons.set_geometry(polygons.geometry.centroid).to_crs(WGS84).geometry
+    configs = [
+        {
+            "field": "bus_stops_within_500m_boundary",
+            "alias": "bus_stops_inside",
+            "access_m": BUS_ACCESS_DISTANCE_M,
+            "transport_types": ["bus"],
+            "label": "bus",
+        },
+        {
+            "field": "mrt_lrt_stations_within_800m_boundary",
+            "alias": "mrt_stations_inside",
+            "access_m": MRT_LRT_ACCESS_DISTANCE_M,
+            "transport_types": ["mrt"],
+            "label": "mrt_lrt",
+        },
+    ]
+    result = {key: fields.copy() for key in polygons[id_col].tolist()}
+    populated = {config["field"]: 0 for config in configs}
+    consecutive_failures = 0
+    consecutive_empty = 0
+
+    for position, (index, polygon) in enumerate(polygons.iterrows(), start=1):
+        if consecutive_failures >= 8 or consecutive_empty >= 20:
+            print("Warning: repeated empty/failed OneMap transport responses; skipping remaining transport calls for this layer.")
+            break
+        polygon_id = polygon[id_col]
+        geom = polygon.geometry
+        if geom is None or geom.is_empty:
+            continue
+        centroid = geom.centroid
+        centroid_wgs84 = centroids_wgs84.loc[index]
+        for config in configs:
+            radius = int(min(math.ceil(farthest_boundary_distance(centroid, geom) + config["access_m"]), MAX_ONEMAP_RADIUS_M))
+            cache_key = "|".join([
+                geography_type,
+                str(polygon_id),
+                config["label"],
+                str(config["access_m"]),
+                str(radius),
+            ])
+            if cache_key in cache:
+                count = cache[cache_key]
+            else:
+                count = None
+                for transport_type in config["transport_types"]:
+                    try:
+                        records = onemap_nearby_transport(
+                            centroid_wgs84.y,
+                            centroid_wgs84.x,
+                            radius,
+                            transport_type,
+                            token,
+                        )
+                        points = [transport_point_svy21(record) for record in records]
+                        count = sum(
+                            1 for point in points
+                            if point is not None and point.distance(geom) <= config["access_m"]
+                        )
+                        if count or records:
+                            break
+                    except Exception as error:
+                        print(f"Warning: OneMap {config['label']} failed for {polygon_id}: {error}")
+                        consecutive_failures += 1
+                        if consecutive_failures >= 8:
+                            break
+                if count is not None:
+                    consecutive_failures = 0
+                    consecutive_empty = consecutive_empty + 1 if count == 0 else 0
+                    cache[cache_key] = count
+                    cache_changed = True
+            result[polygon_id][config["field"]] = count
+            result[polygon_id][config["alias"]] = count
+            if count is not None:
+                populated[config["field"]] += 1
+        if position % 25 == 0:
+            print(f"  OneMap transport progress: {position}/{len(polygons)} {geography_type} polygons")
+
+    if cache_changed:
+        save_transport_cache(cache)
+    total = len(polygons)
+    print(f"Bus data populated: {populated['bus_stops_within_500m_boundary']}/{total}")
+    print(f"MRT/LRT data populated: {populated['mrt_lrt_stations_within_800m_boundary']}/{total}")
+    return result
+
+
 def calculate_hawker_counts(polygons_gdf, id_col: str, population_lookup: dict[str, float | None]) -> dict[str, dict[str, float | int | None]]:
     counts = spatial_count_points_in_polygons(polygons_gdf, HAWKER_GEOJSON if HAWKER_GEOJSON.exists() else None, id_col, "hawker_centres_inside")
     result = {}
@@ -641,12 +886,14 @@ def weighted_score(parts: list[tuple[float | None, float]]) -> float | None:
 
 
 def calculate_transport_score(props: dict[str, Any]) -> float | None:
-    # Simple point-in-polygon transport score. Counts are capped at practical
-    # strong-provision levels and rescaled if only MRT or bus data exists.
+    # Boundary-distance transport score. Missing components are skipped and
+    # available weights are rescaled.
+    bus_count = props.get("bus_stops_within_500m_boundary")
+    mrt_count = props.get("mrt_lrt_stations_within_800m_boundary")
     return weighted_score(
         [
-            (normalize_score(props.get("mrt_stations_inside"), 3), 45),
-            (normalize_score(props.get("bus_stops_inside"), 35), 55),
+            (normalize_score(bus_count, 20), 55),
+            (normalize_score(mrt_count, 3), 45),
         ]
     )
 
@@ -659,8 +906,8 @@ def calculate_amenity_score(props: dict[str, Any]) -> float | None:
         [
             (normalize_score(props.get("hawker_centres_inside"), 4), 30),
             (normalize_score(props.get("hawker_per_100k_residents"), 20), 20),
-            (normalize_score(props.get("mrt_stations_inside"), 3), 25),
-            (normalize_score(props.get("bus_stops_inside"), 35), 25),
+            (normalize_score(props.get("bus_stops_within_500m_boundary"), 20), 25),
+            (normalize_score(props.get("mrt_lrt_stations_within_800m_boundary"), 3), 25),
         ]
     )
 
@@ -713,16 +960,12 @@ def enrich_subzone_geojson() -> tuple[dict[str, Any], Any | None, dict[str, floa
     subzones_gdf = None
     land_use_lookup = {}
     hawker_lookup = {}
-    mrt_lookup = {}
-    bus_lookup = {}
+    transport_lookup = {}
     if gpd is not None:
         subzones_gdf = prepare_subzone_gdf(geojson, subzone_prop, planning_prop)
         land_use_lookup = calculate_land_use_shares(subzones_gdf, "atlas_join_key")
         placeholder_population = {key: None for key in subzones_gdf["atlas_join_key"].tolist()}
-        mrt_source = resolve_transport_source(MRT_STATIONS_GEOJSON, MRT_CACHE_GEOJSON, "ONEMAP_MRT_THEME", "mrt_stations", "MRT/LRT stations")
-        bus_source = resolve_transport_source(BUS_STOPS_GEOJSON, BUS_CACHE_GEOJSON, "ONEMAP_BUS_THEME", "bus_stops", "bus stops")
-        mrt_lookup = spatial_count_points_in_polygons(subzones_gdf, mrt_source, "atlas_join_key", "mrt_stations_inside")
-        bus_lookup = spatial_count_points_in_polygons(subzones_gdf, bus_source, "atlas_join_key", "bus_stops_inside")
+        transport_lookup = calculate_onemap_boundary_transport(subzones_gdf, "atlas_join_key", "subzone")
         hawker_lookup = calculate_hawker_counts(subzones_gdf, "atlas_join_key", placeholder_population)
     else:
         print("GeoPandas missing; spatial land-use and amenity metrics will be null.")
@@ -833,11 +1076,13 @@ def enrich_subzone_geojson() -> tuple[dict[str, Any], Any | None, dict[str, floa
         for field in LAND_USE_FIELDS:
             props.setdefault(field, None)
 
-        for lookup in [hawker_lookup, mrt_lookup, bus_lookup]:
+        for lookup in [hawker_lookup, transport_lookup]:
             for field, value in lookup.get(join_key, {}).items():
                 props[field] = value
         props.setdefault("hawker_centres_inside", None)
         props.setdefault("hawker_per_100k_residents", None)
+        props.setdefault("bus_stops_within_500m_boundary", None)
+        props.setdefault("mrt_lrt_stations_within_800m_boundary", None)
         props.setdefault("mrt_stations_inside", None)
         props.setdefault("bus_stops_inside", None)
 
@@ -934,12 +1179,19 @@ def area_weighted_aggregate(subzones_gdf, electoral_gdf) -> dict[str, dict[str, 
             "area_km2": round(area_km2, 4),
             "density_per_km2": number_or_none(safe_divide(total_population, area_km2), 0),
             "density_per_km2_estimated": number_or_none(safe_divide(total_population, area_km2), 0),
+            "youth_0_14": round(youth),
+            "working_age_15_64": round(working),
+            "elderly_65_plus": round(elderly),
             "youth_share": calculate_share(youth, total_population),
             "youth_share_estimated": calculate_share(youth, total_population),
             "working_age_share": calculate_share(working, total_population),
             "working_age_share_estimated": calculate_share(working, total_population),
             "elderly_share": calculate_share(elderly, total_population),
             "elderly_share_estimated": calculate_share(elderly, total_population),
+            "chinese_population": round(chinese),
+            "malay_population": round(malay),
+            "indian_population": round(indian),
+            "others_population": round(others),
             "chinese_share": calculate_share(chinese, total_population),
             "chinese_share_estimated": calculate_share(chinese, total_population),
             "malay_share": calculate_share(malay, total_population),
@@ -973,25 +1225,28 @@ def build_electoral_geojson(subzones_gdf) -> dict[str, Any]:
     print("\nElectoral boundary columns detected:")
     print(", ".join(map(str, electoral_gdf.columns)))
     name_col = detect_property(first, ELECTORAL_COLUMN_MAPPING["name"], required=False)
+    full_name_col = detect_property(first, ["ED_DESC_FU", "FULL_NAME", "ELECTORAL_FULL_NAME"], required=False)
     type_col = detect_property(first, ELECTORAL_COLUMN_MAPPING["type"], required=False)
     if not name_col:
         non_geom_cols = [column for column in electoral_gdf.columns if column != "geometry"]
         name_col = non_geom_cols[0] if non_geom_cols else None
-    electoral_gdf["electoral_name"] = electoral_gdf[name_col].map(str) if name_col else "Electoral division"
+    electoral_gdf["electoral_name"] = (
+        electoral_gdf[full_name_col].map(str)
+        if full_name_col
+        else electoral_gdf[name_col].map(str) if name_col else "Electoral division"
+    )
     electoral_gdf["electoral_type"] = (
         electoral_gdf[type_col].map(str)
         if type_col
-        else electoral_gdf["electoral_name"].map(lambda name: "SMC" if " SMC" in name.upper() else "GRC")
+        else electoral_gdf["electoral_name"].map(lambda name: "SMC" if "SMC" in name.upper() else "GRC")
     )
     electoral_gdf["electoral_id"] = electoral_gdf.index.map(lambda index: f"electoral-{index}")
 
     aggregates = area_weighted_aggregate(subzones_gdf, electoral_gdf)
     population_lookup = {key: values.get("total_population") for key, values in aggregates.items()}
+    electoral_land_lookup = calculate_land_use_shares(electoral_gdf, "electoral_id")
     hawker_lookup = calculate_hawker_counts(electoral_gdf, "electoral_id", population_lookup)
-    mrt_source = resolve_transport_source(MRT_STATIONS_GEOJSON, MRT_CACHE_GEOJSON, "ONEMAP_MRT_THEME", "mrt_stations", "MRT/LRT stations")
-    bus_source = resolve_transport_source(BUS_STOPS_GEOJSON, BUS_CACHE_GEOJSON, "ONEMAP_BUS_THEME", "bus_stops", "bus stops")
-    mrt_lookup = spatial_count_points_in_polygons(electoral_gdf, mrt_source, "electoral_id", "mrt_stations_inside")
-    bus_lookup = spatial_count_points_in_polygons(electoral_gdf, bus_source, "electoral_id", "bus_stops_inside")
+    transport_lookup = calculate_onemap_boundary_transport(electoral_gdf, "electoral_id", "electoral")
 
     max_density = max((values.get("density_per_km2") or 0 for values in aggregates.values()), default=0)
     features = []
@@ -1007,11 +1262,17 @@ def build_electoral_geojson(subzones_gdf) -> dict[str, Any]:
             }
         )
         props.update(aggregates.get(electoral_id, {}))
-        for lookup in [hawker_lookup, mrt_lookup, bus_lookup]:
+        for field, value in electoral_land_lookup.get(electoral_id, {}).items():
+            props[field] = value
+            if field in {"residential_land_share", "park_open_space_share"}:
+                props[f"{field}_estimated"] = value
+        for lookup in [hawker_lookup, transport_lookup]:
             for field, value in lookup.get(electoral_id, {}).items():
                 props[field] = value
         props.setdefault("hawker_centres_inside", None)
         props.setdefault("hawker_per_100k_residents", None)
+        props.setdefault("bus_stops_within_500m_boundary", None)
+        props.setdefault("mrt_lrt_stations_within_800m_boundary", None)
         props.setdefault("mrt_stations_inside", None)
         props.setdefault("bus_stops_inside", None)
         props["transport_score"] = calculate_transport_score(props)
@@ -1028,7 +1289,38 @@ def build_electoral_geojson(subzones_gdf) -> dict[str, Any]:
     return {"type": "FeatureCollection", "features": features}
 
 
+def count_features_with(features: list[dict[str, Any]], field: str) -> int:
+    return sum(
+        1 for feature in features
+        if feature.get("properties", {}).get(field) is not None
+    )
+
+
+def count_features_with_any(features: list[dict[str, Any]], fields: list[str]) -> int:
+    return sum(
+        1 for feature in features
+        if any(feature.get("properties", {}).get(field) is not None for field in fields)
+    )
+
+
+def print_validation_summary(subzone_geojson: dict[str, Any], electoral_geojson: dict[str, Any]) -> None:
+    subzone_features = subzone_geojson.get("features", [])
+    electoral_features = electoral_geojson.get("features", [])
+    print("\nValidation summary:")
+    print(f"Subzone features written: {len(subzone_features)}")
+    print(f"Electoral features written: {len(electoral_features)}")
+    print(f"Subzones with population data: {count_features_with(subzone_features, 'total_population')}/{len(subzone_features)}")
+    print(f"Subzones with land-use data: {count_features_with_any(subzone_features, LAND_USE_FIELDS)}/{len(subzone_features)}")
+    print(f"Subzones with bus data: {count_features_with(subzone_features, 'bus_stops_within_500m_boundary')}/{len(subzone_features)}")
+    print(f"Subzones with MRT/LRT data: {count_features_with(subzone_features, 'mrt_lrt_stations_within_800m_boundary')}/{len(subzone_features)}")
+    print(f"Electoral divisions with data: {count_features_with(electoral_features, 'total_population')}/{len(electoral_features)}")
+    print(f"Electoral divisions with land-use data: {count_features_with_any(electoral_features, LAND_USE_FIELDS)}/{len(electoral_features)}")
+    print(f"Electoral divisions with bus data: {count_features_with(electoral_features, 'bus_stops_within_500m_boundary')}/{len(electoral_features)}")
+    print(f"Electoral divisions with MRT/LRT data: {count_features_with(electoral_features, 'mrt_lrt_stations_within_800m_boundary')}/{len(electoral_features)}")
+
+
 def main() -> None:
+    load_dotenv_local()
     required = [SUBZONE_GEOJSON, AGE_SEX_CSV, ETHNIC_SEX_CSV, LAND_USE_GEOJSON, HAWKER_GEOJSON]
     missing = [path for path in required if not path.exists()]
     if missing:
@@ -1047,6 +1339,7 @@ def main() -> None:
         with output_path.open("w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
         print(f"Wrote {output_path.relative_to(ROOT)}")
+    print_validation_summary(outputs[0][1], outputs[2][1])
 
 
 if __name__ == "__main__":

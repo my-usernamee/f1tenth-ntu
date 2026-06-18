@@ -189,8 +189,8 @@ function EthnicProfile({ properties }) {
 
 function UrbanContext({ properties }) {
   const noTransport =
-    properties?.mrt_stations_inside === null &&
-    properties?.bus_stops_inside === null &&
+    properties?.mrt_lrt_stations_within_800m_boundary === null &&
+    properties?.bus_stops_within_500m_boundary === null &&
     properties?.transport_score === null;
 
   return (
@@ -218,12 +218,12 @@ function UrbanContext({ properties }) {
         ) : (
           <>
             <StatRow
-              label="MRT stations inside"
-              value={formatNumber(properties?.mrt_stations_inside)}
+              label="MRT/LRT within 800m"
+              value={formatNumber(properties?.mrt_lrt_stations_within_800m_boundary)}
             />
             <StatRow
-              label="Bus stops inside"
-              value={formatNumber(properties?.bus_stops_inside)}
+              label="Bus stops within 500m"
+              value={formatNumber(properties?.bus_stops_within_500m_boundary)}
             />
             <StatRow label="Transport score" value={formatDecimal(properties?.transport_score, 1)} />
           </>

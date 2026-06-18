@@ -102,6 +102,8 @@ function normalizeMapFeature(feature) {
     "other_land_share",
     "hawker_centres_inside",
     "hawker_per_100k_residents",
+    "bus_stops_within_500m_boundary",
+    "mrt_lrt_stations_within_800m_boundary",
     "mrt_stations_inside",
     "bus_stops_inside",
     "transport_score",
@@ -409,7 +411,7 @@ export default function Home() {
         results={searchResults}
         onSelectResult={handleSearchSelect}
       />
-
+{/* commented out to remove summary cards 
       <div className="pointer-events-none fixed left-4 top-[202px] z-10 max-w-[calc(100vw-2rem)] lg:left-5 lg:top-[196px] lg:max-w-[760px]">
         <div className="thin-scrollbar pointer-events-auto flex gap-2 overflow-x-auto pb-1">
           <SummaryCard
@@ -438,7 +440,7 @@ export default function Home() {
           />
         </div>
       </div>
-
+*/}
       {noElectoralData ? (
         <div className="civic-panel pointer-events-none fixed left-4 top-[344px] z-10 max-w-sm rounded-lg p-4 text-[13px] leading-6 text-slate-300 lg:left-5">
           Add <span className="font-semibold text-white">data/raw/electoral-boundary-2025.geojson</span> and rerun preprocessing to populate GRC/SMC mode.

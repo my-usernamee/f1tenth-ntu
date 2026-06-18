@@ -16,8 +16,8 @@ const METRICS = [
   ["Park/open-space", "park_open_space_share", formatPercent],
   ["Hawker centres", "hawker_centres_inside", formatNumber],
   ["Hawker per 100k", "hawker_per_100k_residents", (value) => formatDecimal(value, 1)],
-  ["MRT stations", "mrt_stations_inside", formatNumber],
-  ["Bus stops", "bus_stops_inside", formatNumber],
+  ["MRT/LRT within 800m", "mrt_lrt_stations_within_800m_boundary", formatNumber],
+  ["Bus stops within 500m", "bus_stops_within_500m_boundary", formatNumber],
   ["Amenity score", "amenity_score", (value) => formatDecimal(value, 1)],
   ["Access gap score", "access_gap_score", (value) => formatDecimal(value, 1)]
 ];
